@@ -1,26 +1,28 @@
 #!/usr/bin/env bash
 
-export DEBUG=${DEBUG:="mediasoup:INFO* *WARN* *ERROR*"}
+export DEBUG=${DEBUG:="*"}
 export INTERACTIVE=${INTERACTIVE:="true"}
 export PROTOO_LISTEN_PORT=${PROTOO_LISTEN_PORT:="4443"}
 export HTTPS_CERT_FULLCHAIN=${HTTPS_CERT_FULLCHAIN:="/service/certs/fullchain.pem"}
 export HTTPS_CERT_PRIVKEY=${HTTPS_CERT_PRIVKEY:="/service/certs/privkey.pem"}
 export MEDIASOUP_LISTEN_IP=${MEDIASOUP_LISTEN_IP:="0.0.0.0"}
-export MEDIASOUP_MIN_PORT=${MEDIASOUP_MIN_PORT:="2000"}
-export MEDIASOUP_MAX_PORT=${MEDIASOUP_MAX_PORT:="2020"}
+export MEDIASOUP_MIN_PORT=${MEDIASOUP_MIN_PORT:="64900"}
+export MEDIASOUP_MAX_PORT=${MEDIASOUP_MAX_PORT:="65000"}
 
 # Valgrind related options.
-export MEDIASOUP_USE_VALGRIND=${MEDIASOUP_USE_VALGRIND:="false"}
-export MEDIASOUP_VALGRIND_OPTIONS=${MEDIASOUP_VALGRIND_OPTIONS:="--leak-check=full --track-fds=yes --log-file=/storage/mediasoup_valgrind_%p.log"}
-
+# export MEDIASOUP_USE_VALGRIND=${MEDIASOUP_USE_VALGRIND:="false"}
+# export MEDIASOUP_VALGRIND_OPTIONS=${MEDIASOUP_VALGRIND_OPTIONS:="--leak-check=full --track-fds=yes --log-file=/storage/mediasoup_valgrind_%p.log"}
+	# -p ${PROTOO_LISTEN_PORT}:${PROTOO_LISTEN_PORT}/tcp \
+	# -p ${MEDIASOUP_MIN_PORT}-${MEDIASOUP_MAX_PORT}:${MEDIASOUP_MIN_PORT}-${MEDIASOUP_MAX_PORT}/udp \
+	# -p ${MEDIASOUP_MIN_PORT}-${MEDIASOUP_MAX_PORT}:${MEDIASOUP_MIN_PORT}-${MEDIASOUP_MAX_PORT}/tcp \
 docker run \
 	--name=mediasoup-demo \
+	--network=mediasoup \
+-p ${MEDIASOUP_MIN_PORT}-${MEDIASOUP_MAX_PORT}:${MEDIASOUP_MIN_PORT}-${MEDIASOUP_MAX_PORT}/udp  \
 	-p ${PROTOO_LISTEN_PORT}:${PROTOO_LISTEN_PORT}/tcp \
-	-p ${MEDIASOUP_MIN_PORT}-${MEDIASOUP_MAX_PORT}:${MEDIASOUP_MIN_PORT}-${MEDIASOUP_MAX_PORT}/udp \
-	-p ${MEDIASOUP_MIN_PORT}-${MEDIASOUP_MAX_PORT}:${MEDIASOUP_MIN_PORT}-${MEDIASOUP_MAX_PORT}/tcp \
 	-v ${PWD}:/storage \
-	-v ${MEDIASOUP_SRC}:/mediasoup-src \
-	--init \
+	-v ${PWD}/../../mediasoup:/mediasoup-src \
+	-v ${PWD}/certs:/service/certs \
 	-e DEBUG \
 	-e INTERACTIVE \
 	-e DOMAIN \
@@ -31,8 +33,6 @@ docker run \
 	-e MEDIASOUP_ANNOUNCED_IP \
 	-e MEDIASOUP_MIN_PORT \
 	-e MEDIASOUP_MAX_PORT \
-	-e MEDIASOUP_USE_VALGRIND \
-	-e MEDIASOUP_VALGRIND_OPTIONS \
 	-e MEDIASOUP_WORKER_BIN \
 	-it \
 	--rm \

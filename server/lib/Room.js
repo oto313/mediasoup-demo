@@ -4,9 +4,15 @@ const throttle = require('@sitespeed.io/throttle');
 const Logger = require('./Logger');
 const config = require('../config');
 const Bot = require('./Bot');
-
+const bridge = require('mediasoup-sdp-bridge')
 const logger = new Logger('Room');
+//const bridge = require('mediasoup-sdp-bridge');
+var uuid = require("uuid");
 
+const SdpUtils = require("./SdpUtils");
+const SdpTransform = require("sdp-transform");
+const RemoteSdp_1 = require("mediasoup-client/lib/handlers/sdp/RemoteSdp");
+const MsSdpUtils = require("mediasoup-client/lib/handlers/sdp/commonUtils");
 /**
  * Room class.
  *
@@ -63,6 +69,8 @@ class Room extends EventEmitter
 		super();
 		this.setMaxListeners(Infinity);
 
+    this.producers = [];
+    this.producerMedias = [];
 		// Room id.
 		// @type {String}
 		this._roomId = roomId;
@@ -144,10 +152,11 @@ class Room extends EventEmitter
 
 	logStatus()
 	{
-		logger.info(
-			'logStatus() [roomId:%s, protoo Peers:%s]',
-			this._roomId,
-			this._protooRoom.peers.length);
+		// logger.info(
+		// 	'logStatus() [roomId:%s, protoo Peers:%s, mediasoup Transports:%s]',
+		// 	this._roomId,
+		// 	this._protooRoom.peers.length,
+		// 	this._mediasoupRouter._transports.size); // NOTE: Private API.
 	}
 
 	/**
@@ -204,7 +213,7 @@ class Room extends EventEmitter
 
 		peer.on('request', (request, accept, reject) =>
 		{
-			logger.debug(
+			logger.info(
 				'protoo Peer "request" event [method:%s, peerId:%s]',
 				request.method, peer.id);
 
@@ -257,7 +266,121 @@ class Room extends EventEmitter
 	{
 		return this._mediasoupRouter.rtpCapabilities;
 	}
+ 
 
+	 async processOffer(
+		{
+			type,
+			sdp,
+		}
+	)
+	{
+		logger.info('Processing %s %s', type, sdp);
+  const webRtcTransportOptions =
+				{
+					...config.mediasoup.webRtcTransportOptions
+				};
+
+				const transport = await this._mediasoupRouter.createWebRtcTransport(
+					webRtcTransportOptions);
+                                  logger.info('producer %s', transport.id);
+      let sdpEndpoint = bridge.createSdpEndpoint(transport, bridge.generateRtpCapabilities0());
+    let producers = await sdpEndpoint.processOffer(sdp);
+    let answer = sdpEndpoint.createAnswer();
+    let broadcasterId = uuid.v4();
+    producers[0].enableTraceEvent([ 'keyframe' ]);
+    const broadcaster =
+		{
+			id: broadcasterId,
+			data :
+			{
+				displayName: 'test',
+				device :
+				{
+					flag    : 'broadcaster',
+					name    : 'Unknown device',
+					version : '1.0'
+				},
+				rtpCapabilities: producers[0].rtpParameters,
+				transports    : new Map(),
+				producers     : new Map(),
+				consumers     : new Map(),
+				dataProducers : new Map(),
+				dataConsumers : new Map()
+			}
+		};
+  for (const otherPeer of this._getJoinedPeers())
+		{
+			otherPeer.notify(
+				'newPeer',
+				{
+					id          : broadcaster.id,
+					displayName : broadcaster.data.displayName,
+					device      : broadcaster.data.device
+				})
+				.catch(() => {});
+		}
+   
+// Reply with the list of Peers and their Producers.
+		const peerInfos = [];
+		const joinedPeers = this._getJoinedPeers();
+
+		// Just fill the list of Peers if the Broadcaster provided its rtpCapabilities.
+	
+			for (const joinedPeer of joinedPeers)
+			{
+				const peerInfo =
+				{
+					id          : joinedPeer.id,
+					displayName : joinedPeer.data.displayName,
+					device      : joinedPeer.data.device,
+					producers   : []
+				};
+
+				for (const producer of joinedPeer.data.producers.values())
+				{
+					// Ignore Producers that the Broadcaster cannot consume.
+					if (
+						!this._mediasoupRouter.canConsume(
+							{
+								producerId : producer.id,
+								rtpCapabilities : producers[0].rtpParameters
+							})
+					)
+					{
+						continue;
+					}
+
+					peerInfo.producers.push(
+						{
+							id   : producer.id,
+							kind : producer.kind
+						});
+				}
+
+				peerInfos.push(peerInfo);
+			}
+		
+   let producer = producers[0];
+		// Store the Broadcaster into the map.
+		this._broadcasters.set(broadcaster.id, broadcaster);
+    broadcaster.data.transports.set(transport.id, transport);
+    broadcaster.data.producers.set(producer.id, producer);
+    for (const peer of this._getJoinedPeers())
+		{
+			this._createConsumer(
+				{
+					consumerPeer : peer,
+					producerPeer : broadcaster,
+					producer
+				});
+		}
+    //logger.info('xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxProcessing %j',  producers[0].rtpParameters);
+
+  
+    //broadcaster.data.transports.set(transport.id, transport);
+		return { type: 'answer', sdp: answer };
+	}
 	/**
 	 * Create a Broadcaster. This is for HTTP API requests (see server.js).
 	 *
@@ -487,7 +610,10 @@ class Room extends EventEmitter
 		{
 			broadcasterId,
 			transportId,
-			dtlsParameters
+			dtlsParameters,
+			ip,
+			port,
+			rtcpPort
 		}
 	)
 	{
@@ -500,15 +626,20 @@ class Room extends EventEmitter
 
 		if (!transport)
 			throw new Error(`transport with id "${transportId}" does not exist`);
-
-		if (transport.constructor.name !== 'WebRtcTransport')
+		logger.warn("transport has type " + transport.constructor.name)
+		logger.warn("transport has ip " + ip + " port " + port)
+		if (transport.constructor.name == 'WebRtcTransport')
 		{
-			throw new Error(
-				`transport with id "${transportId}" is not a WebRtcTransport`);
+			await transport.connect({ dtlsParameters });
+		}else if(transport.constructor.name == 'PlainTransport'){
+			await transport.connect({ ip: ip, port: port, rtcpPort: rtcpPort });
+		}else{
+			throw new Error(`transport with id "${transportId}" has invalid type`);
 		}
 
-		await transport.connect({ dtlsParameters });
+		
 	}
+
 
 	/**
 	 * Create a mediasoup Producer associated to a Broadcaster.
@@ -541,7 +672,7 @@ class Room extends EventEmitter
 
 		const producer =
 			await transport.produce({ kind, rtpParameters });
-
+ producer.enableTraceEvent([ 'keyframe' ]);
 		// Store it.
 		broadcaster.data.producers.set(producer.id, producer);
 
@@ -940,6 +1071,7 @@ class Room extends EventEmitter
 
 				const transport = await this._mediasoupRouter.createWebRtcTransport(
 					webRtcTransportOptions);
+				console.log('created transport: %j opt: %j',transport,  webRtcTransportOptions);
 
 				transport.on('sctpstatechange', (sctpState) =>
 				{
@@ -1006,7 +1138,7 @@ class Room extends EventEmitter
 
 				if (!transport)
 					throw new Error(`transport with id "${transportId}" not found`);
-
+				console.log('connecting %j', dtlsParameters);
 				await transport.connect({ dtlsParameters });
 
 				accept();
@@ -1053,7 +1185,7 @@ class Room extends EventEmitter
 						appData
 						// keyFrameRequestDelay: 5000
 					});
-
+ producer.enableTraceEvent([ 'keyframe' ]);
 				// Store the Producer into the protoo Peer data Object.
 				peer.data.producers.set(producer.id, producer);
 

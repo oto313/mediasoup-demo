@@ -169,6 +169,25 @@ async function createExpressApp()
 			res.status(200).json(data);
 		});
 
+	expressApp.post(
+		'/rooms/:roomId/produceSdp', async (req, res, next) =>
+		{
+			const {
+				type,
+				sdp,
+			} = req.body;
+			logger.info(req.body);
+			logger.info(req.body.type);
+			try
+			{
+				const data = await req.room.processOffer({type, sdp});
+				res.status(200).json(data);
+			}
+			catch (error)
+			{
+				next(error);
+			}
+		});
 	/**
 	 * POST API to create a Broadcaster.
 	 */
@@ -254,7 +273,7 @@ async function createExpressApp()
 		async (req, res, next) =>
 		{
 			const { broadcasterId, transportId } = req.params;
-			const { dtlsParameters } = req.body;
+			const { dtlsParameters, ip, port, rtcpPort } = req.body;
 
 			try
 			{
@@ -262,7 +281,10 @@ async function createExpressApp()
 					{
 						broadcasterId,
 						transportId,
-						dtlsParameters
+						dtlsParameters,
+						ip,
+						port,
+						rtcpPort
 					});
 
 				res.status(200).json(data);
@@ -403,8 +425,7 @@ async function createExpressApp()
 		{
 			if (error)
 			{
-				logger.warn('Express app %s', String(error));
-
+				logger.warn('Express app %s \n%s', String(error), String(error.stack));
 				error.status = error.status || (error.name === 'TypeError' ? 400 : 500);
 
 				res.statusMessage = error.message;

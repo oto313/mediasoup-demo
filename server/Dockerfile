@@ -1,15 +1,15 @@
-FROM node:10 AS stage-one
+FROM node:16 AS stage-one
 
 # Install DEB dependencies and others.
 RUN \
 	set -x \
 	&& apt-get update \
-	&& apt-get install -y net-tools build-essential valgrind
+	&& apt-get install -y net-tools build-essential valgrind python3-pip
 
 WORKDIR /service
 
 COPY package.json .
-RUN npm install
+RUN npm install --legacy-peer-deps
 COPY server.js .
 COPY config.js .
 COPY lib lib

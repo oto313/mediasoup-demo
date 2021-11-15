@@ -21,7 +21,9 @@
     "heapdump": "^0.3.15",
     "mediasoup": "github:versatica/mediasoup#v3",
     "pidusage": "^2.0.21",
-    "protoo-server": "^4.0.5"
+    "protoo-server": "^4.0.5",
+    "mediasoup-client": "^3.6.27",
+    "mediasoup-sdp-bridge": "https://github.com/netstalkerr/mediasoup-sdp-bridge/tarball/v3"
   },
   "devDependencies": {
     "eslint": "^6.8.0",
