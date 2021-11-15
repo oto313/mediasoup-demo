@@ -2204,16 +2204,14 @@ export default class RoomClient
 						id,
 						iceParameters,
 						iceCandidates,
-						dtlsParameters :
-						{
-							...dtlsParameters,
-							// Remote DTLS role. We know it's always 'auto' by default so, if
-							// we want, we can force local WebRTC transport to be 'client' by
-							// indicating 'server' here and vice-versa.
-							role : 'auto'
-						},
+						dtlsParameters,
 						sctpParameters,
-						iceServers             : [],
+						iceTransportPolicy : 'relay',
+						iceServers         : [ { 
+							urls       : 'turn:turn.mediasoup.kek.rqa.app:5349?transport=tcp',
+							username   : 'username',
+							credential : 'key'
+						} ],
 						proprietaryConstraints : PC_PROPRIETARY_CONSTRAINTS,
 						additionalSettings 	   :
 							{ encodedInsertableStreams: this._e2eKey && e2e.isSupported() }
@@ -2319,16 +2317,14 @@ export default class RoomClient
 						id,
 						iceParameters,
 						iceCandidates,
-						dtlsParameters :
-						{
-							...dtlsParameters,
-							// Remote DTLS role. We know it's always 'auto' by default so, if
-							// we want, we can force local WebRTC transport to be 'client' by
-							// indicating 'server' here and vice-versa.
-							role : 'auto'
-						},
+						dtlsParameters,
 						sctpParameters,
-						iceServers 	       : [],
+						iceTransportPolicy : 'relay',
+						iceServers         : [ { 
+							urls       : 'turn:turn.mediasoup.kek.rqa.app:5349?transport=tcp',
+							username   : 'username',
+							credential : 'key'
+						} ],
 						additionalSettings :
 							{ encodedInsertableStreams: this._e2eKey && e2e.isSupported() }
 					});
